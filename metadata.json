@@ -1,0 +1,6 @@
+{
+  "name": "ระบบลงเวลาเข้า-ออกงาน โนวาโซล",
+  "description": "ระบบลงเวลาเข้า-ออกงาน พนักงาน หจก.โนวาโซล เช็คอินผ่าน QR, GPS และ Selfie พร้อมรายงาน PDF",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
