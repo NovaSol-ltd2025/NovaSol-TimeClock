@@ -13,22 +13,12 @@ const EMPLOYEES_KEY = 'novasol_employees';
 const USER_RIGHTS_KEY = 'novasol_user_rights';
 const ATTENDANCE_KEY = 'novasol_attendance_records';
 
-// Built-in default connection to the NOVASOL Supabase project, so the app works
-// out of the box with zero configuration. This is the public anon/publishable
-// key, which is safe to ship in client code — access is enforced by Row Level
-// Security policies on the database, not by keeping this key secret.
-// Set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY at build time (e.g. Vercel
-// project env vars) to point a deployment at a different Supabase project, or
-// use the in-app Supabase settings modal to override at runtime.
-const DEFAULT_SUPABASE_URL = 'https://bhglkhlzvctqmdjnrgum.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_52Zx_iCT0VPyoy9YOiUQFA_yDX7fpF8';
-
-const ENV_SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const ENV_SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
-
 let supabaseClient: SupabaseClient | null = null;
 
 export function getStoredSupabaseConfig(): SupabaseConfig {
+  const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
   const stored = localStorage.getItem(CONFIG_KEY);
   if (stored) {
     try {
@@ -40,13 +30,15 @@ export function getStoredSupabaseConfig(): SupabaseConfig {
       // fallback
     }
   }
-  if (ENV_SUPABASE_URL && ENV_SUPABASE_ANON_KEY) {
+
+  if (envUrl && envKey) {
     return {
-      url: ENV_SUPABASE_URL,
-      anonKey: ENV_SUPABASE_ANON_KEY,
+      url: envUrl,
+      anonKey: envKey,
       isConnected: true,
     };
   }
+
   return {
     url: '',
     anonKey: '',
@@ -99,7 +91,7 @@ export async function fetchBranches(): Promise<Branch[]> {
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient.from('branches').select('*');
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         return data as Branch[];
       }
     } catch (err) {
@@ -127,7 +119,7 @@ export async function fetchEmployees(): Promise<Employee[]> {
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient.from('employees').select('*');
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         return data as Employee[];
       }
     } catch (err) {
@@ -155,7 +147,7 @@ export async function fetchUserRights(): Promise<UserRight[]> {
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient.from('user_rights').select('*');
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         return data as UserRight[];
       }
     } catch (err) {
@@ -183,7 +175,7 @@ export async function fetchAttendanceRecords(): Promise<AttendanceRecord[]> {
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient.from('attendance_records').select('*');
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         return data as AttendanceRecord[];
       }
     } catch (err) {
@@ -209,8 +201,6 @@ export async function saveAttendanceRecords(records: AttendanceRecord[]): Promis
  * Generates SQL query string for Supabase table initialization.
  */
 export const SUPABASE_SQL_SCHEMA = `-- Script สร้างตารางสำหรับระบบลงเวลาเข้า-ออกงาน หจก.โนวาโซล (NOVASOL Ltd.)
--- หมายเหตุ: ชื่อคอลัมน์แบบ camelCase ต้องครอบด้วยเครื่องหมายคำพูดคู่ (double quotes)
--- มิฉะนั้น PostgreSQL จะแปลงเป็นตัวพิมพ์เล็กทั้งหมดโดยอัตโนมัติ ทำให้แอปอ่านข้อมูลไม่ตรงกับคอลัมน์
 
 -- 1. ตารางสาขา (branches)
 CREATE TABLE IF NOT EXISTS public.branches (
@@ -219,7 +209,7 @@ CREATE TABLE IF NOT EXISTS public.branches (
   type TEXT NOT NULL, -- 'hq' หรือ 'sub'
   latitude DOUBLE PRECISION NOT NULL,
   longitude DOUBLE PRECISION NOT NULL,
-  "radiusMeters" INTEGER NOT NULL DEFAULT 100,
+  radiusMeters INTEGER NOT NULL DEFAULT 100,
   address TEXT,
   phone TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -228,17 +218,17 @@ CREATE TABLE IF NOT EXISTS public.branches (
 -- 2. ตารางพนักงาน (employees)
 CREATE TABLE IF NOT EXISTS public.employees (
   id TEXT PRIMARY KEY,
-  "empCode" TEXT UNIQUE NOT NULL,
-  "fullName" TEXT NOT NULL,
-  "branchId" TEXT REFERENCES public.branches(id) ON DELETE SET NULL,
+  empCode TEXT UNIQUE NOT NULL,
+  fullName TEXT NOT NULL,
+  branchId TEXT REFERENCES public.branches(id) ON DELETE SET NULL,
   pin VARCHAR(4) NOT NULL,
   status TEXT NOT NULL DEFAULT 'active', -- 'active' หรือ 'terminated'
   position TEXT,
   department TEXT,
   phone TEXT,
   email TEXT,
-  "avatarUrl" TEXT,
-  "joinedDate" DATE,
+  avatarUrl TEXT,
+  joinedDate DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -246,38 +236,38 @@ CREATE TABLE IF NOT EXISTS public.employees (
 CREATE TABLE IF NOT EXISTS public.user_rights (
   id TEXT PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,
-  "fullName" TEXT NOT NULL,
+  fullName TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'staff', -- 'admin', 'supervisor', 'staff'
-  "employeeId" TEXT REFERENCES public.employees(id) ON DELETE SET NULL,
-  "branchScope" TEXT DEFAULT 'all',
-  "canManageUsers" BOOLEAN DEFAULT false,
-  "canManageEmployees" BOOLEAN DEFAULT false,
-  "canManageBranches" BOOLEAN DEFAULT false,
-  "canGenerateQr" BOOLEAN DEFAULT false,
-  "canExportReports" BOOLEAN DEFAULT false,
+  employeeId TEXT REFERENCES public.employees(id) ON DELETE SET NULL,
+  branchScope TEXT DEFAULT 'all',
+  canManageUsers BOOLEAN DEFAULT false,
+  canManageEmployees BOOLEAN DEFAULT false,
+  canManageBranches BOOLEAN DEFAULT false,
+  canGenerateQr BOOLEAN DEFAULT false,
+  canExportReports BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 4. ตารางประวัติการลงเวลาเข้า-ออกงาน (attendance_records)
 CREATE TABLE IF NOT EXISTS public.attendance_records (
   id TEXT PRIMARY KEY,
-  "employeeId" TEXT REFERENCES public.employees(id) ON DELETE CASCADE,
-  "employeeName" TEXT NOT NULL,
-  "branchId" TEXT REFERENCES public.branches(id) ON DELETE CASCADE,
-  "branchName" TEXT NOT NULL,
+  employeeId TEXT REFERENCES public.employees(id) ON DELETE CASCADE,
+  employeeName TEXT NOT NULL,
+  branchId TEXT REFERENCES public.branches(id) ON DELETE CASCADE,
+  branchName TEXT NOT NULL,
   date DATE NOT NULL,
-  "timeIn" TIME,
-  "timeOut" TIME,
-  "selfieInUrl" TEXT,
-  "selfieOutUrl" TEXT,
-  "latitudeIn" DOUBLE PRECISION,
-  "longitudeIn" DOUBLE PRECISION,
-  "latitudeOut" DOUBLE PRECISION,
-  "longitudeOut" DOUBLE PRECISION,
-  "distanceInMeters" INTEGER,
-  "distanceOutMeters" INTEGER,
-  "isWithinRadiusIn" BOOLEAN,
-  "isWithinRadiusOut" BOOLEAN,
+  timeIn TIME,
+  timeOut TIME,
+  selfieInUrl TEXT,
+  selfieOutUrl TEXT,
+  latitudeIn DOUBLE PRECISION,
+  longitudeIn DOUBLE PRECISION,
+  latitudeOut DOUBLE PRECISION,
+  longitudeOut DOUBLE PRECISION,
+  distanceInMeters INTEGER,
+  distanceOutMeters INTEGER,
+  isWithinRadiusIn BOOLEAN,
+  isWithinRadiusOut BOOLEAN,
   status TEXT NOT NULL DEFAULT 'present',
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -289,8 +279,8 @@ ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_rights ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public full access branches" ON public.branches FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access employees" ON public.employees FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access user_rights" ON public.user_rights FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access attendance_records" ON public.attendance_records FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public full access branches" ON public.branches FOR ALL USING (true);
+CREATE POLICY "Public full access employees" ON public.employees FOR ALL USING (true);
+CREATE POLICY "Public full access user_rights" ON public.user_rights FOR ALL USING (true);
+CREATE POLICY "Public full access attendance_records" ON public.attendance_records FOR ALL USING (true);
 `;
