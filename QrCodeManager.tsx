@@ -51,9 +51,13 @@ export const QrCodeManager: React.FC<QrCodeManagerProps> = ({
     branches.find((b) => b.id === selectedBranchId) || visibleBranches[0] || branches[0];
 
   // Requirement 5: QR Code encodes the direct Web Login / Clock-in URL for employees
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  // ถ้ากำหนด VITE_PUBLIC_APP_URL (โดเมนสาธารณะของระบบ) จะใช้ค่านั้นเสมอ ไม่ว่าแอดมินเปิดหน้านี้จากลิงก์ไหน
+  // (ลิงก์เฉพาะ deployment ของ Vercel เช่น xxx-hash-team.vercel.app ต้องล็อกอิน Vercel จึงห้ามใช้ทำ QR)
+  const publicBaseUrl = (import.meta.env.VITE_PUBLIC_APP_URL || '').trim().replace(/\/+$/, '');
+  const origin = publicBaseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+  const pathname = publicBaseUrl ? '/' : typeof window !== 'undefined' ? window.location.pathname : '';
   const qrWebUrl = `${origin}${pathname}?branchId=${selectedBranch?.id || ''}&tab=employee`;
+  const isVercelDeploymentUrl = !publicBaseUrl && /-[a-z0-9]{8,}-[a-z0-9-]+\.vercel\.app$/i.test(origin);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(qrWebUrl);
@@ -651,6 +655,17 @@ export const QrCodeManager: React.FC<QrCodeManagerProps> = ({
             <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
           </button>
         </div>
+
+        {isVercelDeploymentUrl && (
+          <div className="no-print text-left text-xs bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl space-y-1">
+            <p className="font-bold">⚠️ QR นี้อาจสแกนไม่ได้: กำลังใช้ลิงก์เฉพาะของ Vercel deployment</p>
+            <p>
+              ลิงก์แบบ <span className="font-mono">xxx-รหัส-ทีม.vercel.app</span> ถูก Vercel บังคับล็อกอิน
+              พนักงานทั่วไปจะเข้าไม่ได้ ให้เปิดระบบผ่านโดเมนหลัก (Production Domain) แล้วสร้าง QR ใหม่
+              หรือตั้งค่า <span className="font-mono">VITE_PUBLIC_APP_URL</span> ใน Vercel
+            </p>
+          </div>
+        )}
 
         {/* Instructions for Employees */}
         <div className="space-y-2 text-xs text-slate-600 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
