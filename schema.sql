@@ -111,3 +111,11 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- สิทธิ์ระดับตาราง: โปรเจกต์ Supabase ใหม่ไม่ให้สิทธิ์ตารางแก่ anon อัตโนมัติ (ไม่งั้นจะขึ้น "permission denied")
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON
+  public.ns_branches, public.ns_employees, public.ns_user_rights, public.ns_attendance_records
+  FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  public.ns_branches, public.ns_employees, public.ns_user_rights, public.ns_attendance_records
+  TO anon, authenticated;
