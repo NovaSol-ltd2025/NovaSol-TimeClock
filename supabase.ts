@@ -82,18 +82,28 @@ function buildClient(url: string, anonKey: string): SupabaseClient | null {
   }
 }
 
+/** ลายเซ็นของค่าเชื่อมต่อที่ client ปัจจุบันใช้อยู่ (ไว้เช็กว่าเปลี่ยนจริงไหม) */
+let clientSignature = '';
+const signatureOf = (url: string, anonKey: string) => `${sanitizeSupabaseUrl(url)}|${anonKey}`;
+
 export function saveSupabaseConfig(config: SupabaseConfig) {
   const cleanUrl = sanitizeSupabaseUrl(config.url);
   localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...config, url: cleanUrl }));
-  if (supabaseClient) {
-    supabaseClient.removeAllChannels();
-  }
+
+  // ค่าเดิมไม่เปลี่ยน: ใช้ client เดิมต่อ ห้ามตัด Realtime ที่กำลังทำงานอยู่
+  const signature = signatureOf(cleanUrl, config.anonKey);
+  if (supabaseClient && signature === clientSignature) return;
+
+  // ค่าใหม่จริง: ปิดช่องของ client เก่า แล้วสร้างใหม่ (App จะโหลดข้อมูลและสมัคร Realtime ใหม่เอง)
+  if (supabaseClient) supabaseClient.removeAllChannels();
   supabaseClient = buildClient(cleanUrl, config.anonKey);
+  clientSignature = supabaseClient ? signature : '';
 }
 
 // สร้าง client ตอนโหลดโมดูล
 const initialConfig = getStoredSupabaseConfig();
 supabaseClient = buildClient(initialConfig.url, initialConfig.anonKey);
+clientSignature = supabaseClient ? signatureOf(initialConfig.url, initialConfig.anonKey) : '';
 
 export function isSupabaseConfigured(): boolean {
   return supabaseClient !== null;
