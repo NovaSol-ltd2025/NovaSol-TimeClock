@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { SupabaseConfig } from '../types';
-import { saveSupabaseConfig, SUPABASE_SQL_SCHEMA } from '../lib/supabase';
+import {
+  saveSupabaseConfig,
+  checkSupabaseConnection,
+  countLegacyLocalData,
+  migrateLegacyLocalData,
+  clearLegacyLocalData,
+  errorMessage,
+  SUPABASE_SQL_SCHEMA,
+} from '../lib/supabase';
 import {
   Database,
   CheckCircle2,
@@ -19,12 +27,14 @@ import {
 interface SupabaseSettingsModalProps {
   config: SupabaseConfig;
   onUpdateConfig: (cfg: SupabaseConfig) => void;
+  onDataMigrated?: () => void;
   onClose: () => void;
 }
 
 export const SupabaseSettingsModal: React.FC<SupabaseSettingsModalProps> = ({
   config,
   onUpdateConfig,
+  onDataMigrated,
   onClose,
 }) => {
   const [url, setUrl] = useState(config.url || '');
@@ -32,7 +42,11 @@ export const SupabaseSettingsModal: React.FC<SupabaseSettingsModalProps> = ({
   const [copiedSql, setCopiedSql] = useState(false);
   const [activeTab, setActiveTab] = useState<'supabase' | 'vercel' | 'github'>('supabase');
 
-  const handleSave = (e: React.FormEvent) => {
+  const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [legacy, setLegacy] = useState(() => countLegacyLocalData());
+  const [isMigrating, setIsMigrating] = useState(false);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const newCfg: SupabaseConfig = {
       url: url.trim(),
@@ -41,7 +55,27 @@ export const SupabaseSettingsModal: React.FC<SupabaseSettingsModalProps> = ({
     };
     saveSupabaseConfig(newCfg);
     onUpdateConfig(newCfg);
-    alert('บันทึกการตั้งค่า Supabase เรียบร้อยแล้ว!');
+    setStatus({ ok: false, message: 'กำลังทดสอบการเชื่อมต่อ...' });
+    setStatus(await checkSupabaseConnection());
+  };
+
+  const handleMigrate = async () => {
+    if (isMigrating) return;
+    setIsMigrating(true);
+    try {
+      const r = await migrateLegacyLocalData();
+      onDataMigrated?.();
+      const removeLocal = window.confirm(
+        `ย้ายข้อมูลขึ้นฐานข้อมูลสำเร็จ\nสาขา ${r.branches} • พนักงาน ${r.employees} • ผู้ใช้ ${r.userRights} • ลงเวลา ${r.attendance}\n\n` +
+          'ต้องการลบสำเนาเก่าที่เก็บในเครื่องนี้ด้วยหรือไม่? (แนะนำให้ลบ เพื่อไม่ให้สับสนกับข้อมูลจริงในฐานข้อมูล)'
+      );
+      if (removeLocal) clearLegacyLocalData();
+      setLegacy(countLegacyLocalData());
+    } catch (err) {
+      alert(`ย้ายข้อมูลไม่สำเร็จ: ${errorMessage(err)}\n(ข้อมูลในเครื่องยังอยู่ครบ ลองใหม่ได้)`);
+    } finally {
+      setIsMigrating(false);
+    }
   };
 
   const handleCopySql = () => {
@@ -110,8 +144,9 @@ export const SupabaseSettingsModal: React.FC<SupabaseSettingsModalProps> = ({
                   การเชื่อมต่อ Supabase Database
                 </h4>
                 <p className="text-slate-600">
-                  ระบบถูกออกแบบให้รองรับทั้ง Local State ในตัว และเมื่อกรอกข้อมูล URL และ anonKey
-                  ของ Supabase ระบบจะเชื่อมต่อไปยังตาราง Supabase โดยอัตโนมัติ
+                  ข้อมูลทั้งหมด (สาขา พนักงาน สิทธิ์ผู้ใช้ และเวลาเข้า-ออกงาน) เก็บใน Supabase
+                  และอัปเดตแบบ Real-time ทุกเครื่องที่เปิดระบบอยู่จะเห็นข้อมูลตรงกันทันที
+                  (เครื่องนี้เก็บเฉพาะค่า URL/Key สำหรับเชื่อมต่อเท่านั้น)
                 </p>
               </div>
 
@@ -151,6 +186,36 @@ export const SupabaseSettingsModal: React.FC<SupabaseSettingsModalProps> = ({
                   </button>
                 </div>
               </form>
+
+              {status && (
+                <div
+                  className={`p-3 rounded-xl border font-bold ${
+                    status.ok
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  {status.message}
+                </div>
+              )}
+
+              {legacy.total > 0 && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl space-y-2">
+                  <h4 className="font-bold text-amber-900 text-sm">พบข้อมูลเก่าที่เก็บไว้ในเครื่องนี้</h4>
+                  <p className="text-slate-700">
+                    สาขา {legacy.branches.length} • พนักงาน {legacy.employees.length} • ผู้ใช้{' '}
+                    {legacy.userRights.length} • ลงเวลา {legacy.attendance.length} รายการ
+                    — กดย้ายขึ้นฐานข้อมูลเพื่อให้ทุกเครื่องเห็นข้อมูลชุดนี้ (ถ้า id ซ้ำ จะอัปเดตทับรายการในฐานข้อมูล)
+                  </p>
+                  <button
+                    onClick={handleMigrate}
+                    disabled={isMigrating}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-white font-bold rounded-xl cursor-pointer transition"
+                  >
+                    {isMigrating ? 'กำลังย้ายข้อมูล...' : 'ย้ายข้อมูลในเครื่องนี้ขึ้นฐานข้อมูล'}
+                  </button>
+                </div>
+              )}
 
               {/* SQL Schema Copy Block */}
               <div className="space-y-2">

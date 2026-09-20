@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Branch, Employee, AttendanceRecord } from '../types';
+import { Branch, Employee, AttendanceRecord, UserRight } from '../types';
 import { isWithinRadius, getCurrentPosition } from '../lib/geoUtils';
 import {
   UserCheck,
@@ -14,15 +14,18 @@ import {
   LogOut,
   Building2,
   ShieldCheck,
+  Clock,
+  User,
 } from 'lucide-react';
 
 interface CheckInOutModalProps {
   branches: Branch[];
   employees: Employee[];
   attendanceRecords: AttendanceRecord[];
-  onSaveRecord: (record: AttendanceRecord) => void;
+  onSaveRecord: (record: AttendanceRecord) => Promise<boolean | void> | void;
   onClose: () => void;
   defaultBranchId?: string;
+  currentUser?: UserRight | null;
 }
 
 export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
@@ -32,15 +35,34 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
   onSaveRecord,
   onClose,
   defaultBranchId,
+  currentUser,
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // Check if current user is tied to an employee
+  const linkedEmployee = currentUser?.employeeId
+    ? employees.find((e) => e.id === currentUser.employeeId) || null
+    : null;
+
+  const isBranchRestricted =
+    currentUser &&
+    currentUser.role !== 'admin' &&
+    currentUser.branchScope &&
+    currentUser.branchScope !== 'all';
+
+  const initialBranchId =
+    (isBranchRestricted ? currentUser?.branchScope : defaultBranchId) ||
+    linkedEmployee?.branchId ||
+    branches[0]?.id ||
+    '';
+
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(linkedEmployee ? 2 : 1);
 
   // Form State
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(
-    defaultBranchId || branches[0]?.id || ''
-  );
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(initialBranchId);
+  const [empCodeInput, setEmpCodeInput] = useState<string>('');
   const [pin, setPin] = useState<string>('');
-  const [authenticatedEmployee, setAuthenticatedEmployee] = useState<Employee | null>(null);
+  const [authenticatedEmployee, setAuthenticatedEmployee] = useState<Employee | null>(
+    linkedEmployee
+  );
 
   // GPS State
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -61,11 +83,20 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const selectedBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const selectedBranch =
+    branches.find((b) => b.id === selectedBranchId) || branches[0];
 
-  // Validate PIN
-  const handleVerifyPin = (e: React.FormEvent) => {
+  // If already authenticated on mount, fetch GPS immediately
+  useEffect(() => {
+    if (linkedEmployee) {
+      fetchGpsPosition();
+    }
+  }, []);
+
+  // Validate Employee ID and PIN
+  const handleVerifyIdentity = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -75,25 +106,48 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
     }
 
     const activeEmps = employees.filter((emp) => emp.status === 'active');
-    const matchedEmp = activeEmps.find((emp) => emp.pin === pin);
 
-    if (!matchedEmp) {
-      setErrorMessage('รหัส PIN ไม่ถูกต้อง หรือพนักงานไม่ได้อยู่ในสถานะทำงาน');
-      return;
+    let matchedEmp: Employee | undefined;
+
+    if (empCodeInput.trim()) {
+      const cleanCode = empCodeInput.trim().toUpperCase();
+      matchedEmp = activeEmps.find(
+        (emp) =>
+          emp.empCode.toUpperCase() === cleanCode ||
+          emp.empCode.replace(/-/g, '').toUpperCase() === cleanCode.replace(/-/g, '')
+      );
+
+      if (!matchedEmp) {
+        setErrorMessage(`ไม่พบรหัสพนักงาน "${empCodeInput.trim()}" ในระบบ`);
+        return;
+      }
+
+      if (matchedEmp.pin !== pin) {
+        setErrorMessage('รหัส PIN ไม่ถูกต้องสำหรับพนักงานท่านนี้');
+        return;
+      }
+    } else {
+      matchedEmp = activeEmps.find((emp) => emp.pin === pin);
+      if (!matchedEmp) {
+        setErrorMessage('รหัส PIN ไม่ถูกต้อง หรือพนักงานไม่ได้อยู่ในสถานะทำงาน');
+        return;
+      }
     }
 
     setAuthenticatedEmployee(matchedEmp);
-    // Auto sync branch from employee if not explicitly set
+    const targetBranchId = (!defaultBranchId && matchedEmp.branchId) ? matchedEmp.branchId : selectedBranchId;
     if (!defaultBranchId && matchedEmp.branchId) {
       setSelectedBranchId(matchedEmp.branchId);
     }
     setStep(2);
     // Auto load GPS location
-    fetchGpsPosition();
+    const branchForGps = branches.find((b) => b.id === targetBranchId) || selectedBranch;
+    fetchGpsPosition(branchForGps);
   };
 
   // Fetch Browser GPS Location
-  const fetchGpsPosition = async () => {
+  const fetchGpsPosition = async (targetBranch?: Branch) => {
+    const branchToEvaluate = targetBranch || selectedBranch;
     setIsLoadingGps(true);
     setGpsError('');
     try {
@@ -103,26 +157,26 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
       const check = isWithinRadius(
         pos.latitude,
         pos.longitude,
-        selectedBranch.latitude,
-        selectedBranch.longitude,
-        selectedBranch.radiusMeters
+        branchToEvaluate.latitude,
+        branchToEvaluate.longitude,
+        branchToEvaluate.radiusMeters
       );
 
       setDistanceMeters(check.distance);
       setIsGpsValid(check.isWithin);
     } catch (err: any) {
       setGpsError(err.message || 'ไม่สามารถระบุพิกัด GPS ได้');
-      // Fallback for preview mode demo if GPS permission is denied or simulated
+      // Fallback for preview mode demo if GPS permission is denied
       setUserLocation({
-        lat: selectedBranch.latitude + 0.0001,
-        lng: selectedBranch.longitude + 0.0001,
+        lat: branchToEvaluate.latitude + 0.0001,
+        lng: branchToEvaluate.longitude + 0.0001,
       });
       const fallbackCheck = isWithinRadius(
-        selectedBranch.latitude + 0.0001,
-        selectedBranch.longitude + 0.0001,
-        selectedBranch.latitude,
-        selectedBranch.longitude,
-        selectedBranch.radiusMeters
+        branchToEvaluate.latitude + 0.0001,
+        branchToEvaluate.longitude + 0.0001,
+        branchToEvaluate.latitude,
+        branchToEvaluate.longitude,
+        branchToEvaluate.radiusMeters
       );
       setDistanceMeters(fallbackCheck.distance);
       setIsGpsValid(fallbackCheck.isWithin);
@@ -138,24 +192,33 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
     } else {
       stopCamera();
     }
-    return () => {
-      stopCamera();
-    };
+    return () => stopCamera();
   }, [step, capturedSelfieUrl]);
 
   const startCamera = async () => {
     setCameraError('');
     try {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
         audio: false,
       });
+
       setMediaStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
     } catch (err: any) {
-      setCameraError('ไม่สามารถเปิดกล้องถ่ายรูป Selfie ได้ กรุณาอนุญาตสิทธิ์การใช้กล้อง');
+      setCameraError(
+        'ไม่สามารถเข้าถึงกล้องหน้าได้ กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์ของคุณ'
+      );
     }
   };
 
@@ -166,12 +229,14 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
     }
   };
 
+  // Capture Selfie to Canvas & DataURL
   const handleCapturePhoto = () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      canvas.width = video.videoWidth || 480;
-      canvas.height = video.videoHeight || 360;
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 320;
+
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -187,18 +252,19 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
     startCamera();
   };
 
-  // Submit Final Clock In/Out Record
-  const handleFinalSubmit = () => {
-    if (!authenticatedEmployee) return;
+  // Final submit handler
+  const handleFinalSubmit = async () => {
+    if (!authenticatedEmployee || isSaving) return;
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const timeStr = new Date().toLocaleTimeString('th-TH', {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const timeStr = now.toLocaleTimeString('th-TH', {
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
+      hour12: false,
     });
 
-    // Check if there is an existing record for today
+    // Check if employee already has an attendance record for today
     const existingIndex = attendanceRecords.findIndex(
       (r) => r.employeeId === authenticatedEmployee.id && r.date === todayStr
     );
@@ -206,7 +272,7 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
     let finalRecord: AttendanceRecord;
 
     if (existingIndex >= 0 && clockType === 'out') {
-      // Update existing today's record with timeOut
+      // Update existing record with Clock-Out info
       const existing = attendanceRecords[existingIndex];
       finalRecord = {
         ...existing,
@@ -219,8 +285,16 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
         notes: notes ? `${existing.notes || ''} | ออกงาน: ${notes}` : existing.notes,
       };
     } else {
-      // Create new record
-      const isLate = parseInt(timeStr.split(':')[0], 10) >= 9; // > 09:00 is late
+      // Requirement 4: Calculate isLate dynamically based on branch's configured workStartTime
+      const shiftStartTime = selectedBranch.workStartTime || '08:30';
+      const lateThreshold = selectedBranch.lateThresholdMinutes ?? 15;
+      const [shiftH, shiftM] = shiftStartTime.split(':').map((v) => parseInt(v, 10) || 0);
+      const [nowH, nowM] = timeStr.split(':').map((v) => parseInt(v, 10) || 0);
+
+      const shiftCutoffMinutes = shiftH * 60 + shiftM + lateThreshold;
+      const currentMinutes = nowH * 60 + nowM;
+
+      const isLate = clockType === 'in' && currentMinutes > shiftCutoffMinutes;
 
       finalRecord = {
         id: `att-${Date.now()}`,
@@ -242,36 +316,54 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
       };
     }
 
-    onSaveRecord(finalRecord);
+    // รอผลบันทึกลงฐานข้อมูลจริงก่อน จึงแสดงหน้า "สำเร็จ" (ถ้าไม่สำเร็จ App จะแจ้งเตือนเอง)
+    setIsSaving(true);
+    const saved = await onSaveRecord(finalRecord);
+    setIsSaving(false);
+    if (saved === false) return;
     setIsSuccess(true);
     setTimeout(() => {
       onClose();
     }, 2000);
   };
 
+  const visibleBranches = isBranchRestricted
+    ? branches.filter((b) => b.id === currentUser?.branchScope)
+    : branches;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
-        {/* Header */}
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+        {/* Modal Header */}
         <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-sky-400" />
-            <h3 className="font-bold text-base">ระบบเช็คอิน/ออกงาน (Selfie & GPS)</h3>
+          <div className="flex items-center gap-2.5">
+            <UserCheck className="w-5 h-5 text-indigo-400" />
+            <div>
+              <h3 className="font-bold text-sm leading-tight">
+                ระบบลงเวลาเข้า-ออกงาน (Time Clock Station)
+              </h3>
+              <p className="text-[10px] text-slate-400">
+                สาขา {selectedBranch.name} • รัศมี GPS {selectedBranch.radiusMeters} เมตร
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white cursor-pointer transition"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Step Indicator */}
         <div className="bg-slate-100 px-6 py-2.5 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-600 shrink-0">
-          <span className={step === 1 ? 'text-sky-700' : 'text-slate-400'}>1. รหัส PIN</span>
+          <span className={step === 1 ? 'text-indigo-700' : 'text-slate-400'}>1. ยืนยันรหัส</span>
           <span>→</span>
-          <span className={step === 2 ? 'text-sky-700' : 'text-slate-400'}>2. พิกัด GPS</span>
+          <span className={step === 2 ? 'text-indigo-700' : 'text-slate-400'}>2. พิกัด GPS</span>
           <span>→</span>
-          <span className={step === 3 ? 'text-sky-700' : 'text-slate-400'}>3. ถ่าย Selfie</span>
+          <span className={step === 3 ? 'text-indigo-700' : 'text-slate-400'}>3. ถ่าย Selfie</span>
           <span>→</span>
-          <span className={step === 4 ? 'text-sky-700' : 'text-slate-400'}>4. บันทึกเวลางาน</span>
+          <span className={step === 4 ? 'text-indigo-700' : 'text-slate-400'}>4. บันทึกเวลางาน</span>
         </div>
 
         {/* Modal Body */}
@@ -291,18 +383,18 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
             </div>
           ) : (
             <>
-              {/* STEP 1: PIN AUTHENTICATION */}
+              {/* STEP 1: EMPLOYEE ID & PIN AUTHENTICATION (Requirement 1) */}
               {step === 1 && (
-                <form onSubmit={handleVerifyPin} className="space-y-4">
+                <form onSubmit={handleVerifyIdentity} className="space-y-4">
                   <div className="text-center space-y-1">
-                    <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mx-auto">
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto border border-indigo-200">
                       <KeyRound className="w-6 h-6" />
                     </div>
                     <h4 className="font-bold text-base text-slate-900">
-                      กรอกรหัส PIN 4 หลักเพื่อเข้าสู่ระบบ
+                      กรอกรหัสพนักงาน & รหัส PIN 4 หลัก
                     </h4>
                     <p className="text-xs text-slate-500">
-                      เลือกสาขาและกรอกรหัส PIN ประจำตัวพนักงาน
+                      เพื่อยืนยันตัวตนก่อนการตรวจสอบพิกัด GPS และถ่ายภาพ Selfie
                     </p>
                   </div>
 
@@ -314,43 +406,40 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
                   )}
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      สาขาที่จะลงเวลาเข้า-ออกงาน
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-indigo-600" />
+                      รหัสพนักงาน (Employee ID) <span className="text-slate-400 font-normal">(เช่น NS02-006)</span>
                     </label>
-                    <select
-                      value={selectedBranchId}
-                      onChange={(e) => setSelectedBranchId(e.target.value)}
-                      className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-sky-500 bg-slate-50"
-                    >
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} (รัศมี {b.radiusMeters}m)
-                        </option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={empCodeInput}
+                      onChange={(e) => setEmpCodeInput(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 uppercase bg-slate-50 focus:bg-white"
+                      placeholder="NS02-006 หรือ NS-001"
+                      autoFocus
+                    />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      รหัส PIN 4 หลัก
+                      รหัส PIN 4 หลัก <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="password"
                       maxLength={4}
                       value={pin}
                       onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                      className="w-full text-center text-2xl font-mono tracking-widest py-3 border-2 border-slate-300 rounded-2xl focus:border-sky-500 focus:outline-hidden bg-amber-50/50"
+                      className="w-full text-center text-2xl font-mono tracking-widest py-2.5 border-2 border-slate-300 rounded-2xl focus:border-indigo-500 focus:outline-hidden bg-amber-50/50"
                       placeholder="••••"
-                      autoFocus
                       required
                     />
                   </div>
 
                   <button
                     type="submit"
-                    className="w-full py-3 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition"
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition"
                   >
-                    ตรวจสอบรหัส PIN และไปขั้นตอนถัดไป →
+                    ตรวจสอบรหัสและไปขั้นตอนถัดไป →
                   </button>
                 </form>
               )}
@@ -358,34 +447,72 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
               {/* STEP 2: GPS RADIUS CHECK */}
               {step === 2 && authenticatedEmployee && (
                 <div className="space-y-4">
-                  <div className="bg-sky-50 p-3 rounded-2xl border border-sky-100 flex items-center gap-3">
-                    <img
-                      src={
-                        authenticatedEmployee.avatarUrl ||
-                        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'
-                      }
-                      alt={authenticatedEmployee.fullName}
-                      className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-xs"
-                    />
+                  <div className="bg-indigo-50/60 p-3.5 rounded-2xl border border-indigo-100 flex items-center gap-3">
+                    {authenticatedEmployee.avatarUrl ? (
+                      <img
+                        src={authenticatedEmployee.avatarUrl}
+                        alt={authenticatedEmployee.fullName}
+                        className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-xs shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-indigo-200 text-indigo-800 font-bold flex items-center justify-center text-base shrink-0">
+                        {authenticatedEmployee.fullName.charAt(0)}
+                      </div>
+                    )}
                     <div>
-                      <div className="text-xs font-bold text-sky-900">
+                      <div className="text-xs font-bold text-indigo-950">
                         {authenticatedEmployee.fullName} ({authenticatedEmployee.empCode})
                       </div>
-                      <div className="text-[11px] text-sky-700">
-                        {authenticatedEmployee.position} | สาขา {selectedBranch.name}
+                      <div className="text-[11px] text-indigo-700 font-medium mt-0.5">
+                        {authenticatedEmployee.position}
                       </div>
                     </div>
                   </div>
 
+                  {/* Branch Selection: Displayed after employee identity is authenticated */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                        สาขาที่ต้องการลงเวลา
+                      </span>
+                      {selectedBranch?.workStartTime && (
+                        <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                          เข้างาน: {selectedBranch.workStartTime} - {selectedBranch.workEndTime} น.
+                        </span>
+                      )}
+                    </label>
+                    <select
+                      value={selectedBranchId}
+                      onChange={(e) => {
+                        const newBranchId = e.target.value;
+                        setSelectedBranchId(newBranchId);
+                        const newB = branches.find((b) => b.id === newBranchId);
+                        if (newB) {
+                          fetchGpsPosition(newB);
+                        }
+                      }}
+                      disabled={Boolean(isBranchRestricted)}
+                      className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 bg-white disabled:bg-slate-100 cursor-pointer"
+                    >
+                      {visibleBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} (เวลา {b.workStartTime || '08:30'} - {b.workEndTime || '17:30'} น.)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="space-y-2">
                     <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                      <MapPin className="w-4 h-4 text-sky-600" />
+                      <MapPin className="w-4 h-4 text-indigo-600" />
                       ตรวจสอบพิกัด GPS ระยะทางจากสาขา
                     </h4>
 
                     {isLoadingGps ? (
                       <div className="py-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2 bg-slate-50 rounded-xl">
-                        <RefreshCw className="w-4 h-4 animate-spin text-sky-600" />
+                        <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
                         <span>กำลังดึงตำแหน่งพิกัด GPS ของคุณ...</span>
                       </div>
                     ) : (
@@ -422,7 +549,7 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
 
                     <button
                       onClick={fetchGpsPosition}
-                      className="text-xs text-sky-700 hover:underline font-bold flex items-center gap-1 cursor-pointer pt-1"
+                      className="text-xs text-indigo-700 hover:underline font-bold flex items-center gap-1 cursor-pointer pt-1"
                     >
                       <RefreshCw className="w-3.5 h-3.5" /> รีเฟรชตำแหน่ง GPS อีกครั้ง
                     </button>
@@ -430,7 +557,7 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
 
                   <button
                     onClick={() => setStep(3)}
-                    className="w-full py-3 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition"
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition"
                   >
                     ถ่ายรูป Selfie ยืนยันตัวตน →
                   </button>
@@ -442,7 +569,7 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
                 <div className="space-y-3">
                   <div className="text-center space-y-1">
                     <h4 className="font-bold text-sm text-slate-900 flex items-center justify-center gap-1.5">
-                      <Camera className="w-4 h-4 text-sky-600" />
+                      <Camera className="w-4 h-4 text-indigo-600" />
                       ถ่ายรูป Selfie ใบหน้าหน้าตรง
                     </h4>
                     <p className="text-[11px] text-slate-500">
@@ -457,12 +584,13 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
                     </div>
                   )}
 
-                  <div className="relative bg-slate-900 rounded-2xl overflow-hidden h-64 flex items-center justify-center border-2 border-sky-500/30">
+                  <div className="relative bg-slate-900 rounded-2xl overflow-hidden h-64 flex items-center justify-center border-2 border-indigo-500/30">
                     {capturedSelfieUrl ? (
                       <img
                         src={capturedSelfieUrl}
                         alt="Captured Selfie"
                         className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <>
@@ -497,7 +625,7 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
                       <button
                         type="button"
                         onClick={handleCapturePhoto}
-                        className="px-6 py-2.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
                       >
                         <Camera className="w-4 h-4" /> กดถ่ายรูป Selfie
                       </button>
@@ -507,7 +635,7 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
                   {capturedSelfieUrl && (
                     <button
                       onClick={() => setStep(4)}
-                      className="w-full py-3 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition mt-2"
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition mt-2"
                     >
                       ไปยังขั้นตอนสุดท้ายบันทึกเวลา →
                     </button>
@@ -522,21 +650,31 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
                     <div className="flex items-center justify-between border-b pb-2">
                       <span className="text-xs text-slate-500 font-medium">พนักงาน:</span>
                       <span className="font-bold text-slate-900 text-sm">
-                        {authenticatedEmployee.fullName}
+                        {authenticatedEmployee.fullName} ({authenticatedEmployee.empCode})
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between border-b pb-2">
                       <span className="text-xs text-slate-500 font-medium">สาขา:</span>
-                      <span className="font-bold text-sky-800 text-xs">
+                      <span className="font-bold text-indigo-800 text-xs">
                         {selectedBranch.name}
+                      </span>
+                    </div>
+
+                    {/* Requirement 4: Shift Display */}
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-indigo-600" /> กะเวลาสาขา:
+                      </span>
+                      <span className="font-bold text-xs text-slate-800">
+                        {selectedBranch.workStartTime || '08:30'} - {selectedBranch.workEndTime || '17:30'} น.
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500 font-medium">ระยะ GPS:</span>
                       <span
-                        className={`font-bold text-xs px-2 py-0.5 rounded ${
+                        className={`font-bold text-xs px-2 py-0.5 rounded-md ${
                           isGpsValid
                             ? 'bg-emerald-100 text-emerald-800'
                             : 'bg-amber-100 text-amber-800'
@@ -548,57 +686,54 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
                   </div>
 
                   {/* Clock Type Selector */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-2">
-                      เลือกประเภทการลงเวลา
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setClockType('in')}
-                        className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition ${
-                          clockType === 'in'
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <LogIn className="w-4 h-4" />
-                        <span>ลงเวลาเข้างาน (In)</span>
-                      </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setClockType('in')}
+                      className={`p-3.5 rounded-2xl border-2 flex flex-col items-center gap-1.5 cursor-pointer transition ${
+                        clockType === 'in'
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold'
+                          : 'border-slate-200 bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      <LogIn className="w-5 h-5 text-emerald-600" />
+                      <span className="text-xs">ลงเวลาเข้างาน (Clock In)</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setClockType('out')}
-                        className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition ${
-                          clockType === 'out'
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>ลงเวลาออกงาน (Out)</span>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setClockType('out')}
+                      className={`p-3.5 rounded-2xl border-2 flex flex-col items-center gap-1.5 cursor-pointer transition ${
+                        clockType === 'out'
+                          ? 'border-indigo-500 bg-indigo-50 text-indigo-900 font-bold'
+                          : 'border-slate-200 bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      <LogOut className="w-5 h-5 text-indigo-600" />
+                      <span className="text-xs">ลงเวลาออกงาน (Clock Out)</span>
+                    </button>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      หมายเหตุเพิ่มเติม (Optional)
+                      หมายเหตุเพิ่มเติม (ถ้ามี)
                     </label>
                     <input
                       type="text"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-                      placeholder="เช่น ปฏิบัติงานนอกสถานที่, ออกก่อนเวลา..."
+                      placeholder="เช่น ขออนุญาตออกไปพบลูกค้าภายนอก..."
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 bg-white"
                     />
                   </div>
 
                   <button
                     onClick={handleFinalSubmit}
-                    className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-sky-600/30 cursor-pointer transition"
+                    disabled={isSaving}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-wait text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition flex items-center justify-center gap-2"
                   >
-                    Confirm & Yยืนยันการบันทึกเวลางาน
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isSaving ? 'กำลังบันทึกลงฐานข้อมูล...' : 'ยืนยันบันทึกเวลาทำงาน'}</span>
                   </button>
                 </div>
               )}

@@ -4,26 +4,26 @@ import { Clock, Shield, Building2, Database, UserCheck, LogOut, CheckCircle2 } f
 
 interface HeaderProps {
   currentUser: UserRight;
-  onChangeUser: (user: UserRight) => void;
-  allUsers: UserRight[];
   supabaseConfig: SupabaseConfig;
   onOpenSupabaseModal: () => void;
   branches: Branch[];
   activeBranchFilter: string;
   onChangeBranchFilter: (branchId: string) => void;
   onQuickClockIn: () => void;
+  onLogout?: () => void;
+  onOpenPasswordModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentUser,
-  onChangeUser,
-  allUsers,
   supabaseConfig,
   onOpenSupabaseModal,
   branches,
   activeBranchFilter,
   onChangeBranchFilter,
   onQuickClockIn,
+  onLogout,
+  onOpenPasswordModal,
 }) => {
   const [time, setTime] = useState(new Date());
 
@@ -74,23 +74,25 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Supabase status badge */}
-          <button
-            onClick={onOpenSupabaseModal}
-            className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer"
-            title="ตั้งค่าการ เชื่อมต่อ Supabase Database & Vercel Deployment"
-          >
-            <Database className="w-3 h-3 text-emerald-400" />
-            <span>
-              {supabaseConfig.isConnected ? (
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-2.5 h-2.5" /> Supabase Connected
-                </span>
-              ) : (
-                <span className="text-amber-400 font-bold">Database Local Mode</span>
-              )}
-            </span>
-          </button>
+          {/* Supabase status badge - visible only to Admin */}
+          {currentUser.role === 'admin' && (
+            <button
+              onClick={onOpenSupabaseModal}
+              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold transition bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer"
+              title="ตั้งค่าการเชื่อมต่อ Supabase Database & Vercel Deployment (เฉพาะ Admin)"
+            >
+              <Database className="w-3 h-3 text-emerald-400" />
+              <span>
+                {supabaseConfig.isConnected ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-2.5 h-2.5" /> Realtime เชื่อมต่อแล้ว
+                  </span>
+                ) : (
+                  <span className="text-amber-400 font-bold">Realtime ยังไม่เชื่อมต่อ</span>
+                )}
+              </span>
+            </button>
+          )}
 
           {/* Clock Widget */}
           <div className="flex items-center gap-1.5 font-mono text-slate-200 bg-slate-800/90 px-2.5 py-0.5 rounded border border-slate-700 text-[11px]">
@@ -138,14 +140,24 @@ export const Header: React.FC<HeaderProps> = ({
               <select
                 value={activeBranchFilter}
                 onChange={(e) => onChangeBranchFilter(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-700 focus:outline-hidden pr-2 cursor-pointer"
+                disabled={Boolean(currentUser.role !== 'admin' && currentUser.branchScope && currentUser.branchScope !== 'all')}
+                className="bg-transparent text-xs font-bold text-slate-700 focus:outline-hidden pr-2 cursor-pointer disabled:cursor-not-allowed"
               >
-                <option value="all">🌐 แสดงทุกสาขา ({branches.length} สาขา)</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.type === 'hq' ? '🏢' : '🏪'} {b.name}
-                  </option>
-                ))}
+                {currentUser.role === 'admin' && (
+                  <option value="all">🌐 แสดงทุกสาขา ({branches.length} สาขา)</option>
+                )}
+                {branches
+                  .filter((b) =>
+                    currentUser.role === 'admin' ||
+                    !currentUser.branchScope ||
+                    currentUser.branchScope === 'all' ||
+                    b.id === currentUser.branchScope
+                  )
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.type === 'hq' ? '🏢' : '🏪'} {b.name}
+                    </option>
+                  ))}
               </select>
             </div>
           )}
@@ -159,35 +171,32 @@ export const Header: React.FC<HeaderProps> = ({
             <span>ลงเวลาเข้า-ออกงาน (Selfie/GPS)</span>
           </button>
 
-          {/* Role / User Switcher Simulator */}
-          <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-md border border-slate-200">
-            <div className="flex items-center gap-1.5 pl-2 pr-1">
-              <Shield className={`w-4 h-4 ${currentUser.role === 'admin' ? 'text-indigo-600' : 'text-amber-600'}`} />
+          {/* Current User Info & Logout */}
+          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-md border border-slate-200">
+            <div className="flex items-center gap-2 px-2">
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${currentUser.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                <Shield className="w-4 h-4" />
+              </div>
               <div className="text-left">
-                <div className="text-[11px] font-bold text-slate-800 leading-tight">
+                <div className="text-xs font-bold text-slate-800 leading-tight">
                   {currentUser.fullName}
                 </div>
-                <div className="text-[10px] text-slate-500 capitalize font-medium">
+                <div className="text-[10px] text-slate-500 font-medium">
                   สิทธิ: {currentUser.role === 'admin' ? 'ผู้ดูแลระบบ (Admin)' : currentUser.role === 'supervisor' ? 'หัวหน้าสาขา' : 'พนักงาน'}
                 </div>
               </div>
             </div>
 
-            <select
-              value={currentUser.id}
-              onChange={(e) => {
-                const found = allUsers.find((u) => u.id === e.target.value);
-                if (found) onChangeUser(found);
-              }}
-              className="text-xs bg-white border border-slate-200 rounded-md px-2 py-1 text-slate-700 font-bold focus:outline-hidden cursor-pointer"
-              title="สลับบทบาทผู้ใช้เพื่อทดสอบสิทธิ์การใช้งาน"
-            >
-              {allUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  👤 {u.fullName} ({u.role.toUpperCase()})
-                </option>
-              ))}
-            </select>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ml-1"
+                title="ออกจากระบบ"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">ออกจากระบบ</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

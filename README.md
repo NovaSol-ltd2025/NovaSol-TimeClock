@@ -1,20 +1,13 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# ฐานข้อมูล NOVASOL Time Clock (Supabase + Realtime)
 
-# Run and deploy your AI Studio app
+1. เปิด Supabase > SQL Editor แล้วรัน `schema.sql` ตามด้วย `seed.sql` (รันซ้ำได้ ไม่ทับข้อมูลเดิม)
+   - ตารางทั้งหมดขึ้นต้นด้วย `ns_` ไม่ชนกับตารางอื่นในโปรเจกต์
+   - `schema.sql` เปิด Realtime ให้ 4 ตารางแล้ว (`supabase_realtime` publication)
+2. ตั้งค่า `VITE_SUPABASE_URL` และ `VITE_SUPABASE_ANON_KEY` (ดู `.env.example`) หรือกรอกในเมนูตั้งค่า Supabase ของแอป
+3. ล็อกอินด้วย `admin` (รหัสผ่านเริ่มต้นใน `seed.sql`) แล้ว **เปลี่ยนรหัสผ่านทันที**
+4. ถ้าเคยใช้แอปเวอร์ชันเก่าที่เก็บข้อมูลในเครื่อง ให้เปิดเมนูตั้งค่า Supabase แล้วกด "ย้ายข้อมูลในเครื่องนี้ขึ้นฐานข้อมูล"
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/b058bbb8-2212-48d5-8d23-28bfe3752cf0
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## หมายเหตุด้านความปลอดภัย
+แอปเป็นหน้าเว็บล้วนที่เชื่อมฐานข้อมูลด้วย anon key และตรวจรหัสผ่าน/PIN ฝั่งเบราว์เซอร์ จึงต้องเปิดสิทธิ์ตารางให้ anon
+(`app_full_access`) ผู้ที่มี key สามารถอ่าน/แก้ข้อมูลได้ รวมถึง `password` และ `pin` ที่เก็บเป็นข้อความธรรมดา
+ก่อนใช้งานจริงควรย้ายการล็อกอิน/บันทึกเวลาไปผ่านฟังก์ชันฝั่งเซิร์ฟเวอร์ (Edge Function) และเก็บรหัสผ่าน/PIN แบบ hash
