@@ -3,25 +3,53 @@
 @import "leaflet/dist/leaflet.css";
 
 @layer base {
+  *, ::before, ::after {
+    font-family: 'Chakra Petch', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  }
   body {
-    font-family: 'Chakra Petch', sans-serif;
+    font-family: 'Chakra Petch', sans-serif !important;
     background-color: #f8fafc;
     color: #0f172a;
     -webkit-tap-highlight-color: transparent;
   }
+  input, button, select, textarea, optgroup {
+    font-family: 'Chakra Petch', sans-serif !important;
+  }
 }
 
-/* Custom Print styles for PDF and Print summaries */
+/* Custom Print styles for A4 QR Poster & Reports */
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
 @media print {
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
-  .no-print {
+  
+  /* Hide all app chrome, sidebars, navigation, modals backdrop, and utility toolbars */
+  header, nav, aside, .no-print, [role="navigation"] {
     display: none !important;
   }
+  
   .print-only {
     display: block !important;
+  }
+
+  /* Make sure the A4 poster occupies the print page cleanly */
+  .a4-print-target {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 20px !important;
+    box-shadow: none !important;
+    border: 2px solid #334155 !important;
+    page-break-inside: avoid !important;
   }
 }
 

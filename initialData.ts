@@ -1,4 +1,4 @@
-import { Branch, Employee, UserRight, AttendanceRecord } from '../types';
+import { Branch, Employee, UserRight, AttendanceRecord } from './types';
 
 export const INITIAL_BRANCHES: Branch[] = [
   {
@@ -10,6 +10,9 @@ export const INITIAL_BRANCHES: Branch[] = [
     radiusMeters: 100,
     address: '99/1 อาคารโนวาโซล ถนนพระราม 9 แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพฯ 10310',
     phone: '02-123-4567',
+    workStartTime: '08:30',
+    workEndTime: '17:30',
+    lateThresholdMinutes: 15,
   },
   {
     id: 'b-chonburi',
@@ -20,6 +23,9 @@ export const INITIAL_BRANCHES: Branch[] = [
     radiusMeters: 100,
     address: '45/8 หมู่ 5 ถนนสุขุมวิท ต.นาเกลือ อ.บางละมุง จ.ชลบุรี 20150',
     phone: '038-987-654',
+    workStartTime: '09:00',
+    workEndTime: '18:00',
+    lateThresholdMinutes: 15,
   },
   {
     id: 'b-chiangmai',
@@ -30,6 +36,9 @@ export const INITIAL_BRANCHES: Branch[] = [
     radiusMeters: 150,
     address: '120/3 ถนนซุปเปอร์ไฮเวย์ ต.ช้างเผือก อ.เมือง จ.เชียงใหม่ 50300',
     phone: '053-111-222',
+    workStartTime: '08:00',
+    workEndTime: '17:00',
+    lateThresholdMinutes: 10,
   },
   {
     id: 'b-phuket',
@@ -40,6 +49,9 @@ export const INITIAL_BRANCHES: Branch[] = [
     radiusMeters: 100,
     address: '88/9 ถนนเทพกระษัตรี ต.ตลาดใหญ่ อ.เมือง จ.ภูเก็ต 83000',
     phone: '076-333-444',
+    workStartTime: '09:30',
+    workEndTime: '18:30',
+    lateThresholdMinutes: 15,
   },
 ];
 
@@ -128,6 +140,20 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     joinedDate: '2022-05-10',
     avatarUrl: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&q=80&w=200',
   },
+  {
+    id: 'emp-007',
+    empCode: 'NS02-006',
+    fullName: 'คุณชลธิชา พงษ์ศิริ',
+    branchId: 'b-chonburi',
+    pin: '1234',
+    status: 'active',
+    position: 'เจ้าหน้าที่ประสานงานสาขาชลบุรี',
+    department: 'บริการลูกค้า',
+    phone: '089-112-3344',
+    email: 'cholticha@novasol.co.th',
+    joinedDate: '2024-02-01',
+    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200',
+  },
 ];
 
 export const INITIAL_USER_RIGHTS: UserRight[] = [
@@ -136,6 +162,7 @@ export const INITIAL_USER_RIGHTS: UserRight[] = [
     username: 'admin',
     fullName: 'ผู้ดูแลระบบ (Admin โนวาโซล)',
     role: 'admin',
+    password: 'admin123',
     branchScope: 'all',
     canManageUsers: true,
     canManageEmployees: true,
@@ -148,6 +175,7 @@ export const INITIAL_USER_RIGHTS: UserRight[] = [
     username: 'sup_chonburi',
     fullName: 'หัวหน้าสาขาชลบุรี',
     role: 'supervisor',
+    password: '123456',
     branchScope: 'b-chonburi',
     canManageUsers: false,
     canManageEmployees: false,
@@ -160,6 +188,7 @@ export const INITIAL_USER_RIGHTS: UserRight[] = [
     username: 'staff_user',
     fullName: 'พนักงานประจำสาขา',
     role: 'staff',
+    password: '123456',
     branchScope: 'b-hq',
     canManageUsers: false,
     canManageEmployees: false,

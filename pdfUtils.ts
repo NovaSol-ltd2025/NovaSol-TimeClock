@@ -1,4 +1,4 @@
-import { AttendanceRecord, Branch, Employee } from '../types';
+import { AttendanceRecord, Branch, Employee } from './types';
 
 export interface ReportFilterOptions {
   periodType: 'daily' | 'monthly';

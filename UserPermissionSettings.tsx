@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserRight, Role, Employee, Branch } from '../types';
+import { UserRight, Role, Employee, Branch } from './types';
 import {
   Shield,
   ShieldAlert,
@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Building2,
 } from 'lucide-react';
+import { MovableModal } from './MovableModal';
 
 interface UserPermissionSettingsProps {
   userRights: UserRight[];
@@ -39,6 +40,7 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
     username: string;
     fullName: string;
     role: Role;
+    password?: string;
     employeeId: string;
     branchScope: string;
     canManageUsers: boolean;
@@ -50,6 +52,7 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
     username: '',
     fullName: '',
     role: 'staff',
+    password: '',
     employeeId: '',
     branchScope: 'all',
     canManageUsers: false,
@@ -60,6 +63,7 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
   });
 
   const [formError, setFormError] = useState('');
+  const [userToDelete, setUserToDelete] = useState<UserRight | null>(null);
 
   const handleOpenModal = (user?: UserRight) => {
     if (user) {
@@ -69,6 +73,7 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
         username: user.username,
         fullName: user.fullName,
         role: user.role,
+        password: user.password || (user.role === 'admin' ? 'admin123' : '123456'),
         employeeId: user.employeeId || '',
         branchScope: user.branchScope || 'all',
         canManageUsers: user.canManageUsers,
@@ -83,6 +88,7 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
         username: '',
         fullName: '',
         role: 'staff',
+        password: '123456',
         employeeId: '',
         branchScope: 'all',
         canManageUsers: false,
@@ -143,6 +149,7 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
       username: formData.username.trim(),
       fullName: formData.fullName.trim(),
       role: formData.role,
+      password: formData.password || '123456',
       employeeId: formData.employeeId || undefined,
       branchScope: formData.branchScope,
       canManageUsers: formData.canManageUsers,
@@ -297,11 +304,8 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
                 </button>
                 {user.username !== 'admin' && (
                   <button
-                    onClick={() => {
-                      if (confirm(`คุณต้องการลบผู้ใช้งาน "@${user.username}" ใช่หรือไม่?`)) {
-                        onDeleteUserRight(user.id);
-                      }
-                    }}
+                    type="button"
+                    onClick={() => setUserToDelete(user)}
                     className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1 cursor-pointer transition"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> ลบ
@@ -313,24 +317,17 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
         ))}
       </div>
 
-      {/* Modal for User Permissions */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-              <h3 className="font-bold text-base flex items-center gap-2">
-                <Shield className="w-5 h-5 text-sky-400" />
-                {editingUser ? 'แก้ไขสิทธิผู้ใช้งาน' : 'เพิ่มผู้ใช้งานระบบใหม่'}
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+      {/* Modal for User Permissions with Movable & Scrollable Features */}
+      <MovableModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingUser ? 'แก้ไขสิทธิผู้ใช้งาน' : 'เพิ่มผู้ใช้งานระบบใหม่'}
+        subtitle="คลิกลากแถบหัวข้อเพื่อขยับฟอร์ม / สามารถเลื่อนดูสิทธิการเข้าถึงด้านล่างได้"
+        icon={<Shield className="w-5 h-5 text-sky-400" />}
+        maxWidth="max-w-xl"
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col h-full">
+          <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -366,6 +363,20 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  รหัสผ่านเข้าสู่ระบบ (Password) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.password || ''}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg font-mono focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                  placeholder="กรอกรหัสผ่านสำหรับเข้าสู่ระบบ"
+                  required
+                />
               </div>
 
               {/* Role Quick Selector */}
@@ -476,25 +487,69 @@ export const UserPermissionSettings: React.FC<UserPermissionSettingsProps> = ({
                   <span>สิทธิพิมพ์รายงานสรุปการเข้างาน / ส่งออก PDF จ่ายเงินเดือน</span>
                 </label>
               </div>
+            </div>
 
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-xl shadow-md cursor-pointer"
-                >
-                  {editingUser ? 'บันทึกแก้ไขสิทธิ' : 'บันทึกเพิ่มผู้ใช้'}
-                </button>
-              </div>
-            </form>
+          <div className="sticky bottom-0 bg-white/95 backdrop-blur-xs px-6 py-3.5 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer transition"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-xl shadow-md cursor-pointer transition"
+            >
+              {editingUser ? 'บันทึกแก้ไขสิทธิ' : 'บันทึกเพิ่มผู้ใช้'}
+            </button>
           </div>
-        </div>
+        </form>
+      </MovableModal>
+
+      {/* In-App User Deletion Confirmation Modal */}
+      {userToDelete && (
+        <MovableModal
+          isOpen={Boolean(userToDelete)}
+          onClose={() => setUserToDelete(null)}
+          title="ยืนยันการลบผู้ใช้งาน"
+          subtitle="คลิกลากเพื่อเลื่อนหน้าต่างได้"
+          icon={<Trash2 className="w-5 h-5 text-rose-400" />}
+          headerColorClass="bg-rose-950 text-white"
+          maxWidth="max-w-md"
+        >
+          <div className="p-5 space-y-4">
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-rose-900 space-y-1">
+                <p className="font-bold">
+                  คุณต้องการลบผู้ใช้งาน "@{userToDelete.username}" ({userToDelete.fullName}) ออกจากระบบใช่หรือไม่?
+                </p>
+                <p className="text-rose-700">การลบผู้ใช้งานจะไม่สามารถกู้คืนข้อมูลได้</p>
+              </div>
+            </div>
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteUserRight(userToDelete.id);
+                  setUserToDelete(null);
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>ยืนยันลบผู้ใช้</span>
+              </button>
+            </div>
+          </div>
+        </MovableModal>
       )}
     </div>
   );

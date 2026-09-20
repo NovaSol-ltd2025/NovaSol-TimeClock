@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Branch, Employee, AttendanceRecord } from '../types';
+import { Branch, Employee, AttendanceRecord } from './types';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { MapPin, Building2, Users, Compass, CheckCircle2 } from 'lucide-react';

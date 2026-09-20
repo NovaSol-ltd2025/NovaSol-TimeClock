@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Branch, Employee, UserRight, AttendanceRecord, SupabaseConfig } from '../types';
-import schemaSql from '../../supabase/schema.sql?raw';
-import seedSql from '../../supabase/seed.sql?raw';
+import { Branch, Employee, UserRight, AttendanceRecord, SupabaseConfig } from './types';
+import schemaSql from './schema.sql?raw';
+import seedSql from './seed.sql?raw';
 
 /**
  * ชั้นข้อมูลของแอป: Supabase เป็นแหล่งข้อมูลเดียว (single source of truth)

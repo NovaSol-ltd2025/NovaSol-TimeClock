@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserRight, SupabaseConfig, Branch } from '../types';
+import { UserRight, SupabaseConfig, Branch } from './types';
 import { Clock, Shield, Building2, Database, UserCheck, LogOut, CheckCircle2 } from 'lucide-react';
 
 interface HeaderProps {

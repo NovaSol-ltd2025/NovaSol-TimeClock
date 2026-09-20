@@ -15,6 +15,9 @@ export interface Branch {
   radiusMeters: number; // e.g., 100 meters
   address?: string;
   phone?: string;
+  workStartTime?: string; // e.g. "08:30" (เวลาเข้างานประจำสาขา)
+  workEndTime?: string;   // e.g. "17:30" (เวลาออกงานประจำสาขา)
+  lateThresholdMinutes?: number; // e.g. 15 (จำนวนนาทีผ่อนผันก่อนนับเป็นสาย)
 }
 
 export interface Employee {
@@ -37,6 +40,7 @@ export interface UserRight {
   username: string;
   fullName: string;
   role: Role;
+  password?: string; // รหัสผ่านเข้าสู่ระบบ
   employeeId?: string; // linked employee if applicable
   branchScope?: string; // 'all' or branchId
   canManageUsers: boolean;
@@ -67,6 +71,10 @@ export interface AttendanceRecord {
   isWithinRadiusOut?: boolean;
   status: 'present' | 'late' | 'early_leave' | 'absent';
   notes?: string;
+  isAdjustedByAdmin?: boolean;
+  adminAdjustReason?: string;
+  adjustedByAdminName?: string;
+  adjustedAt?: string;
 }
 
 export interface SupabaseConfig {

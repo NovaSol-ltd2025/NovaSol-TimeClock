@@ -26,21 +26,21 @@ import {
   subscribeToChanges,
   applyChange,
   errorMessage,
-} from './lib/supabase';
+} from './supabase';
 
 // Components
-import { Header } from './components/Header';
-import { Dashboard } from './components/Dashboard';
-import { EmployeeManagement } from './components/EmployeeManagement';
-import { BranchManagement } from './components/BranchManagement';
-import { UserPermissionSettings } from './components/UserPermissionSettings';
-import { BranchMap } from './components/BranchMap';
-import { AttendanceTable } from './components/AttendanceTable';
-import { QrCodeManager } from './components/QrCodeManager';
-import { ReportGenerator } from './components/ReportGenerator';
-import { CheckInOutModal } from './components/CheckInOutModal';
-import { SupabaseSettingsModal } from './components/SupabaseSettingsModal';
-import { LoginScreen } from './components/LoginScreen';
+import { Header } from './Header';
+import { Dashboard } from './Dashboard';
+import { EmployeeManagement } from './EmployeeManagement';
+import { BranchManagement } from './BranchManagement';
+import { UserPermissionSettings } from './UserPermissionSettings';
+import { BranchMap } from './BranchMap';
+import { AttendanceTable } from './AttendanceTable';
+import { QrCodeManager } from './QrCodeManager';
+import { ReportGenerator } from './ReportGenerator';
+import { CheckInOutModal } from './CheckInOutModal';
+import { SupabaseSettingsModal } from './SupabaseSettingsModal';
+import { LoginScreen } from './LoginScreen';
 
 // Icons
 import {

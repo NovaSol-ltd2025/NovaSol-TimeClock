@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SupabaseConfig } from '../types';
+import { SupabaseConfig } from './types';
 import {
   saveSupabaseConfig,
   checkSupabaseConnection,
@@ -8,7 +8,7 @@ import {
   clearLegacyLocalData,
   errorMessage,
   SUPABASE_SQL_SCHEMA,
-} from '../lib/supabase';
+} from './supabase';
 import {
   Database,
   CheckCircle2,

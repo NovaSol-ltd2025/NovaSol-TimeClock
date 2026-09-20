@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Branch, Employee, AttendanceRecord, UserRight } from '../types';
-import { isWithinRadius, getCurrentPosition } from '../lib/geoUtils';
+import { Branch, Employee, AttendanceRecord, UserRight } from './types';
+import { isWithinRadius, getCurrentPosition } from './geoUtils';
 import {
   UserCheck,
   Camera,
