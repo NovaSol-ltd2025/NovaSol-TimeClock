@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AttendanceRecord, Branch, Employee, UserRight } from './types';
 import { MovableModal } from './MovableModal';
+import { getThaiDateStr } from './dateUtils';
 import {
   Calendar,
   Building2,
@@ -155,7 +156,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
     employeeName: '',
     branchId: '',
     branchName: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getThaiDateStr(),
     timeIn: '08:30:00',
     timeOut: '17:30:00',
     status: 'present',
@@ -201,8 +202,6 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
   const handleOpenCreateManual = () => {
     const defaultEmp = employees[0];
     const defaultBranch = branches.find((b) => b.id === (userBranchId !== 'all' ? userBranchId : defaultEmp?.branchId)) || branches[0];
-    const nowTime = new Date().toTimeString().split(' ')[0];
-
     setEditingRecord(null);
     setFormData({
       id: `att-manual-${Date.now()}`,
@@ -210,7 +209,7 @@ export const AttendanceTable: React.FC<AttendanceTableProps> = ({
       employeeName: defaultEmp?.fullName || '',
       branchId: defaultBranch?.id || '',
       branchName: defaultBranch?.name || '',
-      date: new Date().toISOString().split('T')[0],
+      date: getThaiDateStr(),
       timeIn: defaultBranch?.startWorkTime ? `${defaultBranch.startWorkTime}:00` : '08:30:00',
       timeOut: defaultBranch?.endWorkTime ? `${defaultBranch.endWorkTime}:00` : '17:30:00',
       status: 'present',
