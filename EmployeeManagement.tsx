@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Employee, Branch, EmployeeStatus, UserRight } from './types';
+import { getThaiDateStr } from './dateUtils';
 import {
   Users,
   UserPlus,
@@ -79,7 +80,7 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
     department: '',
     phone: '',
     email: '',
-    joinedDate: new Date().toISOString().split('T')[0],
+    joinedDate: getThaiDateStr(),
     avatarUrl: '',
   });
 
@@ -224,7 +225,7 @@ export const EmployeeManagement: React.FC<EmployeeManagementProps> = ({
         department: 'ปฏิบัติการ',
         phone: '',
         email: '',
-        joinedDate: new Date().toISOString().split('T')[0],
+        joinedDate: getThaiDateStr(),
         avatarUrl: '',
       });
     }
