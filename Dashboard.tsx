@@ -1,5 +1,6 @@
 import React from 'react';
 import { Branch, Employee, AttendanceRecord, UserRight } from './types';
+import { getThaiDateStr } from './dateUtils';
 import {
   Users,
   UserCheck,
@@ -35,7 +36,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenClockIn,
   currentUser,
 }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getThaiDateStr();
 
   // If currentUser is regular staff, render personalized Staff Workstation
   if (currentUser?.role === 'staff') {
