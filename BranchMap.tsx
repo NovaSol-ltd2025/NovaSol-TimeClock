@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Branch, Employee, AttendanceRecord } from './types';
+import { getThaiDateStr } from './dateUtils';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { MapPin, Building2, Users, Compass, CheckCircle2 } from 'lucide-react';
@@ -27,7 +28,7 @@ export const BranchMap: React.FC<BranchMapProps> = ({
 }) => {
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getThaiDateStr();
 
   // Center on Thailand or selected branch
   const selectedBranch = branches.find((b) => b.id === selectedBranchId);
