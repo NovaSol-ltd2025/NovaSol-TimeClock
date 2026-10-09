@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AttendanceRecord, Branch, Employee, UserRight } from './types';
 import { generatePrintableReportHTML, ReportFilterOptions } from './pdfUtils';
+import { getThaiDateStr, getThaiMonthStr } from './dateUtils';
 import {
   FileText,
   Printer,
@@ -34,8 +35,8 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
 
   const defaultBranch = isBranchRestricted ? currentUser.branchScope! : 'all';
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const thisMonthStr = todayStr.substring(0, 7);
+  const todayStr = getThaiDateStr();
+  const thisMonthStr = getThaiMonthStr();
 
   const [filter, setFilter] = useState<ReportFilterOptions>({
     periodType: 'daily',
