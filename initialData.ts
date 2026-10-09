@@ -1,4 +1,5 @@
 import { Branch, Employee, UserRight, AttendanceRecord } from './types';
+import { getThaiDateStr } from './dateUtils';
 
 export const INITIAL_BRANCHES: Branch[] = [
   {
@@ -198,7 +199,7 @@ export const INITIAL_USER_RIGHTS: UserRight[] = [
   },
 ];
 
-const todayStr = new Date().toISOString().split('T')[0];
+const todayStr = getThaiDateStr();
 
 export const INITIAL_ATTENDANCE_RECORDS: AttendanceRecord[] = [
   {
