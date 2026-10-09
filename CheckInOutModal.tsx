@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Branch, Employee, AttendanceRecord, UserRight } from './types';
 import { isWithinRadius, getCurrentPosition } from './geoUtils';
+import { getThaiDateStr, getThaiTimeStr } from './dateUtils';
 import {
   UserCheck,
   Camera,
@@ -257,12 +258,10 @@ export const CheckInOutModal: React.FC<CheckInOutModalProps> = ({
     if (!authenticatedEmployee || isSaving) return;
 
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString('th-TH', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
+    // ใช้เวลาไทย (Asia/Bangkok) เสมอ ไม่พึ่งพาโซนเวลาของเครื่อง/เบราว์เซอร์ของผู้ใช้
+    // ป้องกันไม่ให้การสแกนช่วงเที่ยงคืน-06:59 น. เวลาไทยถูกบันทึกเป็นวันก่อนหน้า
+    const todayStr = getThaiDateStr(now);
+    const timeStr = getThaiTimeStr(now);
 
     // Check if employee already has an attendance record for today
     const existingIndex = attendanceRecords.findIndex(
